@@ -23,8 +23,43 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "Arial Unicode MS"]
-plt.rcParams["axes.unicode_minus"] = False
+# ----------------------------------------------------------------------
+# 统一设计系统
+# ----------------------------------------------------------------------
+INK    = "#24292F"   # 主文字
+BLUE   = "#2166AC"   # 等待 / 银行 / 保险
+RED    = "#B2182B"   # 挤兑 / 跑
+GREEN  = "#1B7837"   # 正常 / 健康
+ORANGE = "#E08214"   # 部分恐慌 / 早取
+GRAY   = "#8A8F98"   # 参考线
+GRID   = "#D8DEE4"
+
+plt.rcParams.update({
+    "font.sans-serif": ["Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "Arial Unicode MS"],
+    "axes.unicode_minus": False,
+    "font.size": 10.5,
+    "axes.titlesize": 12.5,
+    "axes.titleweight": "bold",
+    "axes.labelsize": 10.5,
+    "axes.labelcolor": INK,
+    "axes.edgecolor": GRAY,
+    "axes.linewidth": 0.9,
+    "xtick.color": INK, "ytick.color": INK,
+    "xtick.labelsize": 9.5, "ytick.labelsize": 9.5,
+    "figure.facecolor": "white",
+    "axes.facecolor": "white",
+    "legend.frameon": False,
+})
+
+
+def style_ax(ax, ygrid=True):
+    """去掉上右边框，只留浅色横向网格。"""
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    if ygrid:
+        ax.grid(axis="y", color=GRID, lw=0.7, alpha=0.8)
+        ax.set_axisbelow(True)
+
 
 FIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "figures")
 os.makedirs(FIG_DIR, exist_ok=True)
@@ -128,7 +163,6 @@ def simulate_run(N=200_000, lam=0.4, R=2.0, gamma=2.0, m_panic=0.0, insured=Fals
             paid_units += c1
         else:
             break                                     # 资产耗尽：排在后面的提款者拿不到
-    unserved_runners = int(np.sum(withdraw & (payment == 0)))
 
     waiters = ~withdraw
     if insured:
@@ -141,17 +175,12 @@ def simulate_run(N=200_000, lam=0.4, R=2.0, gamma=2.0, m_panic=0.0, insured=Fals
     stats = {
         "late_mean_c": float(payment[~early].mean()),          # 晚期储户人均消费
         "zero_share": float(np.mean(payment == 0)),            # 一无所获的储户占比
-        "c2_paid": bool(np.allclose(payment[waiters], c2) if waiters.sum() else False),
+        "c1_share": float(np.mean(np.isclose(payment, c1))),   # 拿到 c1 的占比
+        "c2_share": float(np.mean(payment >= c2 * 0.99)),      # 稳拿 c2 的占比
         "welfare": float(np.mean(util(np.maximum(payment, 0.01), gamma))),
                  # 效用对 0 消费按 0.01 计，仅为得到可读的有限数值
     }
-    stats["unserved_runners"] = unserved_runners
     return payment, stats
-
-
-def welfare(payment, gamma=2.0):
-    """人均期望效用（0 消费按 0.01 计，仅作相对比较）。"""
-    return float(np.mean(util(np.maximum(payment, 0.01), gamma)))
 
 
 # ----------------------------------------------------------------------
@@ -161,33 +190,42 @@ def fig_contract(R=2.0, lam=0.4):
     gammas = np.linspace(1.05, 5.0, 200)
     c1s = np.array([optimal_contract(R, lam, g)["c1"] for g in gammas])
     c2s = np.array([optimal_contract(R, lam, g)["c2"] for g in gammas])
-    k_base = optimal_contract(R, lam, 2.0)
+    k = optimal_contract(R, lam, 2.0)
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4.6), constrained_layout=True)
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11.5, 4.4), constrained_layout=True)
 
-    ax = axes[0]
-    ax.plot(gammas, c1s, lw=2, label=r"早取者 $c_1$")
-    ax.plot(gammas, c2s, lw=2, label=r"晚取者 $c_2$")
-    ax.axhline(1.0, color="gray", ls="--", lw=1, label="自给自足：早取 = 1")
-    ax.axhline(R, color="black", ls=":", lw=1.2, label="自给自足：晚取 = R")
+    # ---- (a) 合同随风险厌恶的变化，线端直接标注代替图例 ----
+    ax.plot(gammas, c1s, lw=2.4, color=ORANGE)
+    ax.plot(gammas, c2s, lw=2.4, color=BLUE)
+    ax.axhline(1.0, color=GRAY, ls=(0, (4, 3)), lw=1.1)
+    ax.axhline(R, color=GRAY, ls=(0, (1, 2)), lw=1.1)
+    ax.text(5.02, c1s[-1], r"$c_1$", color=ORANGE, fontsize=12, weight="bold", va="center")
+    ax.text(5.02, c2s[-1], r"$c_2$", color=BLUE, fontsize=12, weight="bold", va="center")
+    ax.text(1.10, 1.0 + 0.05, "自给自足：早取 = 1", color=GRAY, fontsize=9)
+    ax.text(1.10, R + 0.05, "自给自足：晚取 = R", color=GRAY, fontsize=9)
+    ax.set_xlim(1.05, 5.35)
+    ax.set_ylim(0.8, R + 0.45)
     ax.set_xlabel(r"相对风险厌恶系数 $\gamma$")
     ax.set_ylabel("合同支付")
-    ax.set_title("(a) 最优合同随风险厌恶程度的变化")
-    ax.legend(fontsize=9)
+    ax.set_title("越怕风险，越需要流动性保险")
+    style_ax(ax)
 
-    ax = axes[1]
-    bars = ax.bar(["银行\n（流动性保险）", "自给自足"],
-                  [k_base["eu_bank"], k_base["eu_autarky"]],
-                  color=["#2e7d32", "#9e9e9e"], width=0.5)
-    ax.set_ylabel("期望效用")
-    ax.set_title(r"(b) 银行 vs 自给自足（$R=2,\ \lambda=0.4,\ \gamma=2$）")
+    # ---- (b) 银行 vs 自给自足 ----
+    bars = ax2.bar(["银行\n（流动性保险）", "自给自足"],
+                   [k["eu_bank"], k["eu_autarky"]],
+                   color=[BLUE, "#B9C2CC"], width=0.52)
     for b in bars:
-        ax.text(b.get_x() + b.get_width() / 2, b.get_height() + 0.002,
-                f"{b.get_height():.4f}", ha="center", fontsize=10)
-    ax.set_ylim(0, max(k_base["eu_bank"], k_base["eu_autarky"]) * 1.25)
+        ax2.text(b.get_x() + b.get_width() / 2, b.get_height() + 0.006,
+                 f"{b.get_height():.4f}", ha="center", fontsize=10.5, color=INK, weight="bold")
+    ax2.set_ylim(0, k["eu_bank"] * 1.42)
+    ax2.text(0.5, k["eu_bank"] * 1.16, f"保险增益 {k['gain']:+.4f}",
+             color=RED, fontsize=10, ha="center", weight="bold")
+    ax2.set_ylabel("期望效用")
+    ax2.set_title(r"银行让每个人都过得更好（$R{=}2,\ \lambda{=}0.4,\ \gamma{=}2$）")
+    style_ax(ax2)
 
     path = os.path.join(FIG_DIR, "fig1_optimal_contract.png")
-    fig.savefig(path, dpi=150)
+    fig.savefig(path, dpi=160)
     plt.close(fig)
     return path
 
@@ -200,40 +238,70 @@ def fig_run_game(R=2.0, lam=0.4, gamma=2.0):
     c1, c2 = k["c1"], k["c2"]
     m, pr, pw, m_star, m_bar = run_payoffs(R, lam, gamma)
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4.6), constrained_layout=True)
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11.5, 4.6), constrained_layout=True)
 
-    ax = axes[0]
-    ax.plot(m, pr, lw=2, color="#c62828", label="跑（t=1 提款）的收益")
-    ax.plot(m, pw, lw=2, color="#1565c0", label="等（t=2 消费）的收益")
-    ax.axvline(m_star, color="purple", ls="-.", lw=1.2)
-    ax.axvline(m_bar, color="gray", ls="--", lw=1)
-    ax.text(m_star + 0.012, 0.28, f"无差异点 $m^*$≈{m_star:.2f}\n（预期挤兑规模超过它，跑是最优反应）",
-            fontsize=9, color="purple")
-    ax.text(m_bar + 0.012, 1.05, f"$\\bar{{m}}$≈{m_bar:.2f}\n（被迫全额清算）", fontsize=9, color="dimgray")
-    ax.scatter([0, 1], [pw[0], pr[-1]], zorder=5, s=70, facecolor="white", edgecolor="black")
-    ax.annotate("均衡①：无人挤兑\n（等 → $c_2$）", (0.0, pw[0]), xytext=(0.05, 1.6), fontsize=9,
-                arrowprops=dict(arrowstyle="->", color="black"))
-    ax.annotate("均衡②：人人挤兑\n（跑 → 清算价值）", (1.0, pr[-1]), xytext=(0.60, 0.55), fontsize=9,
-                arrowprops=dict(arrowstyle="->", color="black"))
+    # ---- (a) 跑/等收益曲线与两个均衡 ----
+    ax.axvspan(m_star, 1.0, color=RED, alpha=0.05, lw=0)
+    ax.plot(m, pr, lw=2.4, color=RED)
+    ax.plot(m, pw, lw=2.4, color=BLUE)
+    ax.text(0.99, pr[-1] - 0.10, "跑", color=RED, fontsize=12, weight="bold", ha="right")
+    ax.text(0.02, pw[0] + 0.06, "等", color=BLUE, fontsize=12, weight="bold")
+
+    ax.axvline(m_star, color=INK, ls=(0, (4, 3)), lw=1.1)
+    ax.text(m_star - 0.015, 0.12, f"$m^*\\approx{m_star:.2f}$\n跑/等无差异",
+            color=INK, fontsize=9, ha="right")
+    ax.axvline(m_bar, color=GRAY, ls=(0, (1, 2)), lw=1.1)
+    ax.text(m_bar + 0.015, 0.12, f"$\\bar{{m}}\\approx{m_bar:.2f}$\n被迫全额清算",
+            color=GRAY, fontsize=9, ha="left")
+    ax.text(0.80, 1.45, "预期挤兑规模超过 $m^*$：\n跑是最优反应\n→ 挤兑自我实现",
+            color=RED, fontsize=9.5)
+
+    for x, y in [(0.0, pw[0]), (1.0, pr[-1])]:
+        ax.scatter([x], [y], s=64, facecolor="white", edgecolor=INK, zorder=5, lw=1.4)
+    ax.annotate("均衡① 无人挤兑：\n晚期消费者稳拿 $c_2$", xy=(0.0, pw[0]),
+                xytext=(0.10, c2 + 0.28), fontsize=9.5, color=INK,
+                arrowprops=dict(arrowstyle="->", color=INK, lw=1.0))
+    ax.annotate("均衡② 人人挤兑：\n只剩清算价值", xy=(1.0, pr[-1]),
+                xytext=(0.60, 0.62), fontsize=9.5, color=INK,
+                arrowprops=dict(arrowstyle="->", color=INK, lw=1.0))
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(-0.06, c2 + 0.55)
     ax.set_xlabel(r"晚期消费者中去挤兑的比例 $m$")
     ax.set_ylabel("晚期消费者的收益")
-    ax.set_title("(a) 协调博弈：挤兑的自我实现")
-    ax.legend(fontsize=9, loc="upper right")
+    ax.set_title("协调博弈：坏预期把自己变成挤兑")
+    style_ax(ax)
 
-    # 面板 b：正常均衡 vs 挤兑均衡的实现消费分布
-    pay_norm, _ = simulate_run(N=50_000, lam=lam, R=R, gamma=gamma, m_panic=0.0, seed=7)
-    pay_run, _ = simulate_run(N=50_000, lam=lam, R=R, gamma=gamma, m_panic=1.0, seed=7)
-    ax = axes[1]
-    bins = np.linspace(0, max(R, c2) * 1.15, 40)
-    ax.hist(pay_norm, bins=bins, alpha=0.55, label="正常均衡", color="#2e7d32")
-    ax.hist(pay_run, bins=bins, alpha=0.55, label="挤兑均衡", color="#c62828")
-    ax.set_xlabel("每位储户最终实现的消费")
-    ax.set_ylabel("人数")
-    ax.set_title("(b) 挤兑把晚期消费从 $c_2$ 打回清算价值，甚至归零")
-    ax.legend(fontsize=9)
+    # ---- (b) 两个均衡下储户结局的构成（100% 堆叠条）----
+    pay_norm, s_norm = simulate_run(N=100_000, lam=lam, R=R, gamma=gamma, m_panic=0.0, seed=7)
+    pay_run, s_run = simulate_run(N=100_000, lam=lam, R=R, gamma=gamma, m_panic=1.0, seed=7)
+
+    rows = ["正常均衡", "挤兑均衡"]
+    shares = {
+        "稳拿 $c_2$（晚取合同）": [s_norm["c2_share"], s_run["c2_share"]],
+        "拿到 $c_1$（t=1 提款）": [s_norm["c1_share"], s_run["c1_share"]],
+        "颗粒无收": [s_norm["zero_share"], s_run["zero_share"]],
+    }
+    colors_seg = [BLUE, ORANGE, "#E7A6AD"]
+    text_seg = ["white", "white", INK]
+    left = np.zeros(2)
+    for (label, vals), cc, tc in zip(shares.items(), colors_seg, text_seg):
+        vals = np.array(vals) * 100
+        ax2.barh(rows, vals, left=left, color=cc, height=0.52, label=label)
+        for i, v in enumerate(vals):
+            if v > 5:
+                ax2.text(left[i] + v / 2, i, f"{v:.0f}%", ha="center", va="center",
+                         color=tc, fontsize=10, weight="bold")
+        left += vals
+    ax2.set_xlim(0, 100)
+    ax2.set_xlabel("储户占比（%）")
+    ax2.set_title("挤兑把 $c_2$ 打回清算价值，甚至归零")
+    ax2.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=3, fontsize=9)
+    style_ax(ax2, ygrid=False)
+    ax2.grid(axis="x", color=GRID, lw=0.7, alpha=0.8)
+    ax2.set_axisbelow(True)
 
     path = os.path.join(FIG_DIR, "fig2_run_equilibria.png")
-    fig.savefig(path, dpi=150)
+    fig.savefig(path, dpi=160)
     plt.close(fig)
     return path
 
@@ -246,20 +314,25 @@ def fig_insurance(R=2.0, lam=0.4, gamma=2.0):
     c1, c2 = k["c1"], k["c2"]
     m, pr, pw, m_star, _ = run_payoffs(R, lam, gamma)
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4.6), constrained_layout=True)
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11.5, 4.5), constrained_layout=True)
 
-    ax = axes[0]
-    ax.plot(m, pr, lw=2, color="#c62828", label="跑（t=1 提款）的收益")
-    ax.plot(m, pw, lw=1.4, color="#1565c0", ls="--", alpha=0.7, label="等（无保险）的收益")
-    ax.axhline(c2, lw=2, color="#1565c0", label="等：政府担保下稳拿 $c_2$")
-    ax.fill_between(m, 0, pr, color="#c62828", alpha=0.06)
+    # ---- (a) 有保险时等待严格占优 ----
+    ax.fill_between(m, 0, pr, color=RED, alpha=0.05, lw=0)
+    ax.plot(m, pr, lw=2.4, color=RED)
+    ax.plot(m, pw, lw=1.5, color=BLUE, ls=(0, (4, 3)), alpha=0.65)
+    ax.axhline(c2, lw=2.6, color=BLUE)
+    ax.text(0.99, pr[-1] - 0.10, "跑", color=RED, fontsize=12, weight="bold", ha="right")
+    ax.text(0.55, c2 + 0.06, "等：政府担保下稳拿 $c_2$", color=BLUE, fontsize=10.5, weight="bold")
+    ax.text(0.66, 0.42, "虚线：没有保险时\n等待的收益（随恐慌下滑）",
+            color=BLUE, fontsize=9, alpha=0.85)
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(0, c2 * 1.22)
     ax.set_xlabel(r"晚期消费者中去挤兑的比例 $m$")
     ax.set_ylabel("晚期消费者的收益")
-    ax.set_title("(a) 存款保险：等待严格占优 → 挤兑均衡被排除")
-    ax.legend(fontsize=9, loc="center left")
-    ax.set_ylim(0, c2 * 1.25)
+    ax.set_title("存款保险：等待严格占优 → 挤兑均衡被排除")
+    style_ax(ax)
 
-    # 面板 b：各情形下晚期储户的人均消费
+    # ---- (b) 各情形下晚期储户人均消费 ----
     _, s_norm = simulate_run(N=200_000, lam=lam, R=R, gamma=gamma, m_panic=0.0, seed=1)
     _, s_part = simulate_run(N=200_000, lam=lam, R=R, gamma=gamma, m_panic=0.9, seed=1)
     _, s_run = simulate_run(N=200_000, lam=lam, R=R, gamma=gamma, m_panic=1.0, seed=1)
@@ -267,18 +340,21 @@ def fig_insurance(R=2.0, lam=0.4, gamma=2.0):
     labels = ["正常均衡", "部分恐慌\n(m=0.9)", "全面挤兑", "存款保险"]
     vals = [s_norm["late_mean_c"], s_part["late_mean_c"], s_run["late_mean_c"], s_ins["late_mean_c"]]
     zeros = [s_norm["zero_share"], s_part["zero_share"], s_run["zero_share"], s_ins["zero_share"]]
-    colors = ["#2e7d32", "#ef6c00", "#c62828", "#1565c0"]
-    ax = axes[1]
-    bars = ax.bar(labels, vals, color=colors, width=0.55)
+    colors = [GREEN, ORANGE, RED, BLUE]
+
+    bars = ax2.bar(labels, vals, color=colors, width=0.55)
     for b, z in zip(bars, zeros):
-        ax.text(b.get_x() + b.get_width() / 2, b.get_height() + 0.02,
-                f"{b.get_height():.3f}\n(颗粒无收 {z:.0%})", ha="center", fontsize=8.5)
-    ax.set_ylabel("晚期储户人均消费")
-    ax.set_title("(b) 福利比较：保险让经济锁定在正常均衡")
-    ax.set_ylim(0, max(vals) * 1.3)
+        ax2.text(b.get_x() + b.get_width() / 2, b.get_height() + 0.035,
+                 f"{b.get_height():.3f}", ha="center", fontsize=10.5, weight="bold", color=INK)
+        ax2.text(b.get_x() + b.get_width() / 2, 0.06,
+                 f"颗粒无收 {z:.0%}", ha="center", fontsize=8.5, color="white", weight="bold")
+    ax2.set_ylim(0, max(vals) * 1.22)
+    ax2.set_ylabel("晚期储户人均消费")
+    ax2.set_title("保险让经济锁定在正常均衡")
+    style_ax(ax2)
 
     path = os.path.join(FIG_DIR, "fig3_deposit_insurance.png")
-    fig.savefig(path, dpi=150)
+    fig.savefig(path, dpi=160)
     plt.close(fig)
     return path
 

@@ -35,8 +35,40 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "Arial Unicode MS"]
-plt.rcParams["axes.unicode_minus"] = False
+# ----------------------------------------------------------------------
+# 统一设计系统（与 dd_model.py 保持一致）
+# ----------------------------------------------------------------------
+INK    = "#24292F"
+BLUE   = "#2166AC"
+RED    = "#B2182B"
+GREEN  = "#1B7837"
+ORANGE = "#E08214"
+GRAY   = "#8A8F98"
+GRID   = "#D8DEE4"
+
+plt.rcParams.update({
+    "font.sans-serif": ["Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "Arial Unicode MS"],
+    "axes.unicode_minus": False,
+    "font.size": 10.5,
+    "axes.titlesize": 12.5,
+    "axes.titleweight": "bold",
+    "axes.labelsize": 10.5,
+    "axes.labelcolor": INK,
+    "axes.edgecolor": GRAY,
+    "axes.linewidth": 0.9,
+    "xtick.color": INK, "ytick.color": INK,
+    "xtick.labelsize": 9.5, "ytick.labelsize": 9.5,
+    "figure.facecolor": "white",
+    "legend.frameon": False,
+})
+
+
+def style_ax(ax, ygrid=True):
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    if ygrid:
+        ax.grid(axis="y", color=GRID, lw=0.7, alpha=0.8)
+        ax.set_axisbelow(True)
 
 FIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "figures")
 os.makedirs(FIG_DIR, exist_ok=True)
@@ -160,50 +192,67 @@ def run_regressions(data):
 
 
 def fig_timeseries(data, path):
-    """机制图风格：工业产出变化 vs 金融困境指数（双轴，标准化）。"""
+    """机制图风格：工业产出变化 vs 金融困境指数（双轴，标准化），标注三次银行恐慌。"""
     x = np.arange(len(data["dln_ip"]))
     distress = zscore(data["bank_distress"]) + 0.6 * zscore(data["borrower_distress"])
 
-    fig, ax1 = plt.subplots(figsize=(11, 4.8))
-    ax1.bar(x, data["dln_ip"], color=np.where(data["dln_ip"] < 0, "#c62828", "#2e7d32"),
-            alpha=0.55, label="Δln(工业生产)（左轴）")
-    ax1.axhline(0, color="black", lw=0.8)
+    fig, ax1 = plt.subplots(figsize=(11.5, 4.8), constrained_layout=True)
+    ax1.bar(x, data["dln_ip"], width=0.8,
+            color=np.where(data["dln_ip"] < 0, "#D89C9C", "#9CBF9C"),
+            label="Δln(工业生产)（左轴）")
+    ax1.axhline(0, color=GRAY, lw=0.8)
     ax1.set_ylabel("Δln(IP)")
     ax1.set_xlabel("月份（1929-01 → 1933-12）")
+    ax1.set_ylim(-0.06, 0.05)
+    style_ax(ax1)
 
     ax2 = ax1.twinx()
-    ax2.plot(x, distress, color="#1565c0", lw=2, label="金融困境指数（右轴，标准化）")
-    ax2.set_ylabel("金融困境指数（标准化）", color="#1565c0")
-    ax2.tick_params(axis="y", labelcolor="#1565c0")
+    ax2.plot(x, distress, color=BLUE, lw=2.2, label="金融困境指数（右轴，标准化）")
+    ax2.set_ylabel("金融困境指数（标准化）", color=BLUE)
+    ax2.tick_params(axis="y", labelcolor=BLUE)
+    ax2.spines["top"].set_visible(False)
+    ymax = float(distress.max())
+    ax2.set_ylim(-1.6, ymax * 1.32)
 
-    lines = [ax1.patches[0], ax2.lines[0]]
-    ax1.legend(lines, [l.get_label() for l in lines], fontsize=9, loc="lower left")
+    for idx, txt, dx in [(22, "1930-11 银行停业潮", -8),
+                         (32, "1931-09 恐慌扩散", -8),
+                         (50, "1933-03 最终挤兑", -13)]:
+        ax2.annotate(txt, xy=(idx, distress[idx]),
+                     xytext=(idx + dx, min(distress[idx] + ymax * 0.14, ymax * 1.12)),
+                     fontsize=8.5, color=BLUE, ha="center",
+                     arrowprops=dict(arrowstyle="->", color=BLUE, lw=0.9))
+
+    from matplotlib.patches import Patch
+    from matplotlib.lines import Line2D
+    handles = [Patch(facecolor="#9CBF9C", label="Δln(工业生产)（左轴）"),
+               Line2D([0], [0], color=BLUE, lw=2.2, label="金融困境指数（右轴，标准化）")]
+    ax1.legend(handles=handles, fontsize=9, loc="lower left")
     ax1.set_title("金融困境与工业生产共同恶化 —— 描述性证据，不等于因果识别")
-    fig.tight_layout()
-    fig.savefig(path, dpi=150)
+    fig.savefig(path, dpi=160)
     plt.close(fig)
 
 
 def fig_fit(data, resA, resB, path):
     x = np.arange(len(data["dln_ip"]))
-    fig, ax = plt.subplots(figsize=(11, 4.8))
-    ax.plot(x, data["dln_ip"], color="black", lw=1.6, label="实际（模拟）Δln(IP)")
-    ax.plot(x, resA["beta"] @ np.column_stack(
-        [np.ones(len(x)), zscore(data["money_growth"]), zscore(data["price_inflation"])]).T,
-        lw=1.4, ls="--", color="#ef6c00", label="模型 A 拟合（仅货币/价格）")
     bank_lag = np.r_[0.0, data["bank_distress"][:-1]]
-    ax.plot(x, resB["beta"] @ np.column_stack(
-        [np.ones(len(x)), zscore(data["money_growth"]), zscore(data["price_inflation"]),
-         data["bank_distress"], bank_lag, data["borrower_distress"]]).T,
-        lw=1.4, ls="-", color="#1565c0", label="模型 B 拟合（+ 金融变量）")
-    ax.axhline(0, color="gray", lw=0.7)
+    XA = np.column_stack([np.ones(len(x)), zscore(data["money_growth"]),
+                          zscore(data["price_inflation"])])
+    XB = np.column_stack([XA, data["bank_distress"], bank_lag, data["borrower_distress"]])
+
+    fig, ax = plt.subplots(figsize=(11.5, 4.8), constrained_layout=True)
+    ax.plot(x, data["dln_ip"], color=INK, lw=1.8, label="实际（模拟）Δln(IP)")
+    ax.plot(x, resA["beta"] @ XA.T, lw=1.6, ls=(0, (4, 3)), color=ORANGE,
+            label=f"模型 A（仅货币/价格）  R²={resA['r2']:.2f}")
+    ax.plot(x, resB["beta"] @ XB.T, lw=2.0, color=BLUE,
+            label=f"模型 B（+ 金融变量）      R²={resB['r2']:.2f}")
+    ax.axhline(0, color=GRAY, lw=0.7)
     ax.set_xlabel("月份（1929-01 → 1933-12）")
     ax.set_ylabel("Δln(IP)")
-    ax.set_title(f"加入金融变量后拟合明显改善：R² 从 {resA['r2']:.2f} 升至 {resB['r2']:.2f}"
-                 "（模拟数据，仅演示框架）")
-    ax.legend(fontsize=9)
-    fig.tight_layout()
-    fig.savefig(path, dpi=150)
+    ax.set_title("加入金融变量后，产出收缩的大部分被解释了（模拟数据，仅演示框架）")
+    ax.legend(fontsize=9.5, loc="lower left")
+    ax.set_ylim(-0.055, 0.045)
+    style_ax(ax)
+    fig.savefig(path, dpi=160)
     plt.close(fig)
 
 
