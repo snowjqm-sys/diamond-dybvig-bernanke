@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f7f4">
+  <title>Diamond–Dybvig 挤兑模型｜互动模型</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper:#f6f7f4; --surface:#fff; --ink:#172722; --muted:#64716b;
+      --line:#dce3dd; --green:#176b54; --green-soft:#e6f1eb;
+      --blue:#426d91; --blue-soft:#e8eef4; --amber:#b47724; --amber-soft:#f6eedf;
+      --red:#a74c44; --red-soft:#f5e9e6; --shadow:0 16px 42px rgba(28,50,41,.07);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+    button,input{font:inherit}
+    button{cursor:pointer}
+    .shell{max-width:1440px;margin:auto;padding:28px clamp(16px,3.5vw,52px) 54px}
+    .topbar{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:0 0 18px;margin-bottom:35px;gap:16px;flex-wrap:wrap}
+    .brand{font-size:13px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--green)}
+    .source-pill{border:1px solid #d8e4dc;color:#3d6856;border-radius:999px;padding:6px 11px;font-size:12px;background:#f0f5f0;white-space:nowrap}
+    .topnav{display:flex;gap:7px;flex-wrap:wrap}
+    .topnav a{text-decoration:none}
+    .topnav-here{border-color:var(--green);color:var(--green);cursor:default;background:var(--green-soft)}
+    .hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,360px);gap:32px;align-items:end;margin-bottom:28px}
+    .eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.13em;color:var(--muted);font-weight:700;margin:0 0 10px}
+    h1{font-size:clamp(34px,5vw,61px);line-height:1.02;letter-spacing:-.045em;margin:0;max-width:850px;font-weight:650}
+    .hero p{margin:14px 0 0;color:#4d5c55;max-width:780px;font-size:16px}
+    .hero-note{font-size:13px;color:var(--muted);border-left:2px solid var(--green);padding:4px 0 4px 14px}
+    .layout{display:grid;grid-template-columns:310px minmax(0,1fr);gap:22px;align-items:start}
+    .controls{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:var(--shadow);position:sticky;top:18px}
+    .section-title{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:15px}
+    .section-title h2,.panel h2{font-size:16px;line-height:1.2;margin:0;font-weight:700;letter-spacing:-.01em}
+    .section-title span{font-size:11px;color:var(--muted)}
+    .presets{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 20px}
+    .preset{border:1px solid var(--line);border-radius:7px;background:#fff;color:#43524b;padding:6px 9px;font-size:11px}
+    .preset:hover,.preset:focus-visible{border-color:var(--green);color:var(--green);outline:none}
+    .field{margin:17px 0 19px}
+    .field-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:3px}
+    .field label{font-size:12px;font-weight:650;color:#34433c}
+    .field output{font-size:12px;font-variant-numeric:tabular-nums;color:var(--green);font-weight:700;white-space:nowrap}
+    .field small{display:block;color:var(--muted);font-size:11px;line-height:1.45;margin:3px 0 7px}
+    input[type=range]{width:100%;height:22px;margin:0;accent-color:var(--green);cursor:ew-resize}
+    .control-sep{border:0;border-top:1px solid var(--line);margin:20px 0}
+    .switch-row{display:flex;gap:10px;align-items:flex-start;color:#35443d;font-size:12px;font-weight:600}
+    .switch-row input{accent-color:var(--green);width:16px;height:16px;margin:2px 0 0;flex:none}
+    .switch-row small{display:block;font-weight:400;color:var(--muted);margin-top:2px}
+    .main{display:grid;gap:18px;min-width:0}
+    .panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px clamp(16px,2vw,25px);box-shadow:var(--shadow);min-width:0}
+    .panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px}
+    .panel-head p{font-size:12px;color:var(--muted);margin:5px 0 0}
+    .quadgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;position:relative}
+    .node{position:relative;border-radius:9px;padding:13px 12px 12px;background:#f7f8f6;min-height:106px;border:1px solid transparent;transition:background .2s,border-color .2s}
+    .quadgrid .node:not(:last-child)::after{content:"→";position:absolute;right:-17px;top:35px;color:#9aa69f;font-size:17px;z-index:2}
+    .node-kicker{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:700}
+    .node-value{display:block;font-size:23px;line-height:1.15;font-variant-numeric:tabular-nums;margin:8px 0 3px;font-weight:700;letter-spacing:-.03em}
+    .node-label{font-size:11px;color:#56635d;line-height:1.35}
+    .node[data-level="low"]{background:var(--green-soft);border-color:#d8e9df}
+    .node[data-level="mid"]{background:var(--amber-soft);border-color:#eadfc8}
+    .node[data-level="high"]{background:var(--red-soft);border-color:#edd8d4}
+    .node[data-level="credit"]{background:var(--blue-soft);border-color:#dce6ee}
+    .node[data-level="low"] .node-value{color:var(--green)}
+    .node[data-level="mid"] .node-value{color:var(--amber)}
+    .node[data-level="high"] .node-value{color:var(--red)}
+    .node[data-level="credit"] .node-value{color:var(--blue)}
+    .node.dim{opacity:.45;filter:saturate(.5)}
+    .callout{display:flex;gap:12px;align-items:flex-start;padding:13px 15px;border-radius:9px;background:#f4f6f3;border-left:3px solid var(--green);font-size:12px;color:#425048}
+    .callout strong{color:var(--ink);font-size:13px}
+    .callout>div{min-width:0}
+    .status-sub{margin-top:3px}
+    .callout.green{background:var(--green-soft);border-left-color:var(--green)}
+    .callout.blue{background:var(--blue-soft);border-left-color:var(--blue)}
+    .callout.amber{background:var(--amber-soft);border-left-color:var(--amber)}
+    .callout.red{background:var(--red-soft);border-left-color:var(--red)}
+    .chart-title{font-size:13px;font-weight:700;margin:0}
+    .chart-caption{font-size:11px;color:var(--muted);margin:3px 0 8px}
+    .chart-wrap{width:100%;min-width:0}
+    svg.chart{display:block;width:100%;height:auto;overflow:visible}
+    .chart text{font:11px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;fill:#65736c}
+    .chart .axis{stroke:#cfd8d1;stroke-width:1}
+    .chart .gridline{stroke:#e8ede9;stroke-width:1}
+    .chart .line-wait{stroke:var(--green);stroke-width:2.6;fill:none}
+    .chart .line-run{stroke:var(--red);stroke-width:2.6;fill:none}
+    .chart .line-run-ins{stroke:var(--blue);stroke-width:2.4;fill:none;stroke-dasharray:7 5}
+    .chart .marker{stroke:#fff;stroke-width:2}
+    .chart .endl{font-size:13px;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
+    .chart .mark{font-size:12px;font-weight:650;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
+    .chart .zone{font-size:11.5px;font-weight:650;letter-spacing:.05em;opacity:.9}
+    #ddChart{touch-action:none;cursor:ew-resize}
+    .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:11px;color:#56635d;margin-top:3px}
+    .legend span{display:inline-flex;align-items:center;gap:6px}
+    .swatch{height:3px;width:18px;background:var(--green);display:inline-block}
+    .swatch.red{background:var(--red)}
+    .swatch.blue{background:var(--blue)} .swatch.amber{background:var(--amber)}
+    .stackbar{display:flex;height:88px;border-radius:9px;overflow:hidden;border:1px solid var(--line);background:#fff}
+    .seg{min-width:0;padding:11px 13px;display:flex;flex-direction:column;gap:2px;overflow:hidden;white-space:nowrap;transition:width .25s ease}
+    .seg b{font-size:12.5px}
+    .seg span{font-size:11px;opacity:.9}
+    .seg i{margin-top:auto;font-style:normal;font-size:11px;font-variant-numeric:tabular-nums;opacity:.75}
+    .seg-paid{background:var(--amber-soft);color:#7a5215}
+    .seg-zero{background:var(--red-soft);color:var(--red)}
+    .seg-wait{background:var(--green-soft);color:var(--green)}
+    .seg-safe{background:var(--blue-soft);color:var(--blue)}
+    .seg.thin b,.seg.thin span{visibility:hidden}
+    #claimsLine{font-size:12px;color:#425048}
+    .tabs{display:flex;gap:5px;border-bottom:1px solid var(--line);margin:-1px 0 15px;padding-bottom:8px}
+    .tab{border:0;background:transparent;color:var(--muted);padding:7px 10px;font-size:12px;border-radius:6px}
+    .tab[aria-selected=true]{background:var(--green-soft);color:var(--green);font-weight:700}
+    .tabpanel[hidden]{display:none}
+    .equations{display:grid;grid-template-columns:1fr 1fr;gap:10px 20px}
+    .equation{padding:10px 0;border-bottom:1px solid #edf0ed}
+    .equation code{display:block;font-family:"SFMono-Regular",Consolas,monospace;color:#244e41;font-size:12px;white-space:normal}
+    .equation p{margin:5px 0 0;color:var(--muted);font-size:11px}
+    .caveat{font-size:11px;color:#6a5740;background:#f8f3e9;padding:10px 12px;border-radius:7px;margin-top:13px}
+    .footer-note{font-size:11px;color:var(--muted);padding:2px 3px}
+    .footer-note a{color:#3d6856}
+    @media(max-width:1050px){.layout{grid-template-columns:270px minmax(0,1fr)}.quadgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.quadgrid .node::after{display:none}}
+    @media(max-width:760px){.shell{padding-top:16px}.topbar{margin-bottom:24px}.hero{grid-template-columns:1fr;gap:15px;margin-bottom:22px}.hero-note{max-width:620px}.layout{grid-template-columns:1fr}.controls{position:static}.main{gap:13px}.quadgrid{gap:9px}.node{min-height:94px}.stackbar{height:auto;min-height:96px}.seg{padding:9px 10px}.equations{grid-template-columns:1fr}}
+    @media(max-width:390px){.quadgrid{grid-template-columns:1fr 1fr}.node{padding:10px}.node-value{font-size:20px}.panel{padding:16px 13px}}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">Intermediate macro · model lab</div>
+      <nav class="topnav">
+        <a class="preset" href="bernanke-interactive.html">← Bernanke 信贷渠道</a>
+        <span class="preset topnav-here">Diamond–Dybvig · 本页</span>
+      </nav>
+      <div class="source-pill">课堂重构 · 数值与 dd_model.py 一致</div>
+    </header>
+
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Diamond–Dybvig (1983) · 银行挤兑与存款保险</p>
+        <h1 id="page-title">跑，还是等？<br>挤兑如何自我实现</h1>
+        <p>调一份活期存款合同，拖动恐慌比例 m，实时观察最优消费、跑/等收益与银行账本的变化——以及存款保险如何一句话关掉挤兑均衡。</p>
+      </div>
+      <div class="hero-note">DD 的关键洞见：银行把非流动性资产变成流动性保险；但「先到先得」意味着别人跑的时候，你也有理由跑。挤兑不是幻觉，而是随时可以自我实现的第二个均衡。</div>
+    </section>
+
+    <div class="layout">
+      <aside class="controls" aria-label="模型参数">
+        <div class="section-title"><h2>合同与偏好</h2><span>拖动即时更新</span></div>
+        <div class="presets" aria-label="情景预设">
+          <button class="preset" data-preset="normal">正常均衡</button>
+          <button class="preset" data-preset="partial">部分恐慌 m=90%</button>
+          <button class="preset" data-preset="panic">全面挤兑 m=100%</button>
+          <button class="preset" data-preset="insured">存款保险</button>
+        </div>
+        <div class="field"><div class="field-head"><label for="inR">投资回报率 R</label><output id="outR" for="inR">2.00</output></div><small>银行资产在第二期的技术回报（R &gt; 1）</small><input id="inR" type="range" min="1.2" max="3" step="0.05" value="2"></div>
+        <div class="field"><div class="field-head"><label for="inLam">早期消费者比例 λ</label><output id="outLam" for="inLam">0.40</output></div><small>第一期就必须取款的储户占比</small><input id="inLam" type="range" min="0.1" max="0.8" step="0.01" value="0.4"></div>
+        <div class="field"><div class="field-head"><label for="inGamma">相对风险厌恶 γ</label><output id="outGamma" for="inGamma">2.0</output></div><small>越高越厌恶消费波动，越需要银行的流动性保险</small><input id="inGamma" type="range" min="1.2" max="4" step="0.1" value="2"></div>
+        <hr class="control-sep">
+        <div class="section-title"><h2>恐慌与制度</h2><span>你的选择</span></div>
+        <div class="field"><div class="field-head"><label for="inM">恐慌提款比例 m</label><output id="outM" for="inM">0%</output></div><small>晚期消费者中提前跑单的比例——信念的变量</small><input id="inM" type="range" min="0" max="100" step="1" value="0"></div>
+        <label class="switch-row"><input id="inInsured" type="checkbox"><span>存款保险（政府全额兑付）<small>提款足额兑付、银行不再被迫清算；现实需配套监管以抑制道德风险</small></span></label>
+        <hr class="control-sep">
+        <p class="chart-caption" style="margin:0">提示：也可以直接在右侧收益图上按住拖动，改变 m。</p>
+      </aside>
+
+      <main class="main">
+        <section class="panel" aria-labelledby="state-title">
+          <div class="panel-head"><div><h2 id="state-title">合同与临界值：当前状态</h2><p>左侧参数决定存款合同 c₁、c₂，以及两个关键比例</p></div></div>
+          <div class="quadgrid" aria-live="polite">
+            <div class="node" id="nodeC1" data-level="mid"><span class="node-kicker">合同 · 第一期</span><strong class="node-value" id="vC1">—</strong><div class="node-label">早期消费者人均消费 c₁</div></div>
+            <div class="node" id="nodeC2" data-level="low"><span class="node-kicker">合同 · 第二期</span><strong class="node-value" id="vC2">—</strong><div class="node-label">等待者人均消费（无挤兑时）c₂</div></div>
+            <div class="node" id="nodeMstar" data-level="credit"><span class="node-kicker">博弈临界 m*</span><strong class="node-value" id="vMstar">—</strong><div class="node-label">m 超过 m*，跑开始占优</div></div>
+            <div class="node" id="nodeMbar" data-level="high"><span class="node-kicker">清算临界 m̄</span><strong class="node-value" id="vMbar">—</strong><div class="node-label">m 达到 m̄，银行资产耗尽</div></div>
+          </div>
+          <div id="statusBox" class="callout green" style="margin-top:17px" aria-live="polite"><div><strong id="statusTitle">—</strong><div id="statusSub" class="status-sub">—</div></div></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><div><h2>收益曲线：跑，还是等？</h2><p>两条线相交于 m*：交点右侧，跑是理性反应——挤兑自我实现</p></div></div>
+          <h3 class="chart-title">人均消费 vs 恐慌提款比例 m</h3>
+          <p class="chart-caption">虚线为临界值 m* 与 m̄；琥珀色竖线与圆点为当前 m。可直接在图上按住拖动。</p>
+          <div class="chart-wrap"><svg id="ddChart" class="chart" viewBox="0 0 900 430" role="img" aria-label="跑与等的预期收益曲线"></svg></div>
+          <div class="legend"><span><i class="swatch red"></i>跑 · v_run</span><span><i class="swatch"></i>等 · v_wait</span><span><i class="swatch blue"></i>保险下 v_run = c₁</span><span><i class="swatch amber"></i>当前 m</span></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><div><h2>银行账本：谁拿到了什么</h2><p>先到先得（序贯服务）：排在前面的人足额拿到 c₁</p></div></div>
+          <p class="chart-caption" id="claimsLine">—</p>
+          <div class="stackbar" id="stackbar" aria-live="polite"></div>
+          <div class="legend" id="barLegend" style="margin-top:10px" aria-live="polite"></div>
+        </section>
+
+        <section class="panel">
+          <div class="tabs" role="tablist" aria-label="模型说明">
+            <button class="tab" id="tab-equations" role="tab" aria-selected="true" aria-controls="panel-equations" type="button">模型方程</button>
+            <button class="tab" id="tab-paper" role="tab" aria-selected="false" aria-controls="panel-paper" type="button">如何对应论文</button>
+          </div>
+          <div class="tabpanel" id="panel-equations" role="tabpanel" aria-labelledby="tab-equations">
+            <div class="equations">
+              <div class="equation"><code>c₁ = 1 / [λ + (1−λ)·R^(1/γ−1)]，c₂ = c₁·R^(1/γ)</code><p>最优存款合同：在两类消费者之间分配资源，使两期边际效用相等。γ 越大，合同越倾向「抹平」两期消费。</p></div>
+              <div class="equation"><code>claims(m) = λ + m·(1−λ)</code><p>提款总需求：早期消费者必取，再加 m 比例的恐慌性提前取款。</p></div>
+              <div class="equation"><code>v_run(m) = min{ c₁, 1 / claims(m) }</code><p>跑的预期收益：能足额兑付时拿 c₁；提款超过资产时，按比例瓜分。</p></div>
+              <div class="equation"><code>v_wait(m) = (1 − claims·c₁)·R / [(1−m)(1−λ)]</code><p>等的预期收益：剩余资产增值后由等待者分享；若 claims·c₁ ≥ 1（资金耗尽），则为 0。</p></div>
+              <div class="equation"><code>m* = (c₂−c₁)/[c₁(R−1)]，m̄ = (1/c₁−λ)/(1−λ)</code><p>m*：跑/等无差异的博弈临界点；m̄：银行资产恰好耗尽的清算临界点。二者含义不同。</p></div>
+              <div class="equation"><code>保险下：v_run = c₁，v_wait = c₂ &gt; c₁</code><p>全额存款保险让跑永远吃亏，挤兑均衡被直接排除，唯一均衡是正常均衡。</p></div>
+            </div>
+            <div class="caveat">v_run / v_wait 是排队位置不确定时的预期人均消费；「银行账本」面板展示先到先得下的实际分配。所有数值与仓库 dd_model.py 完全一致，属于课堂重构，不是 Diamond–Dybvig 原文校准。</div>
+          </div>
+          <div class="tabpanel" id="panel-paper" role="tabpanel" aria-labelledby="tab-paper" hidden>
+            <div class="equations">
+              <div class="equation"><code>模型部分 · 合同与均衡</code><p>左侧参数与 c₁、c₂ 数值卡，对应最优存款合同的推导与数值实现（仓库 fig1）。</p></div>
+              <div class="equation"><code>模型部分 · 挤兑博弈</code><p>收益曲线、临界点 m* 与当前 m 游标，对应「跑/等」博弈与多重均衡的讨论（fig2a）。</p></div>
+              <div class="equation"><code>模型部分 · 序贯服务</code><p>「银行账本」堆叠条对应先到先得约束下的分配结果与四情景模拟（fig2b、fig3）。</p></div>
+              <div class="equation"><code>政策含义 · 存款保险</code><p>打开保险开关：v_wait = c₂ &gt; c₁ 恒成立，挤兑均衡消失——这正是 DD 支持存款保险的核心论证；现实中的保险必须配套资本监管。</p></div>
+            </div>
+            <div class="caveat">m* 与 m̄ 含义不同：前者是「个体跑/等无差异」的博弈临界，后者是「银行资产耗尽」的会计临界。本页为课堂重构，可交互演示，不能替代原论文的严格推导与校准。</div>
+          </div>
+        </section>
+        <div class="footer-note">理论主线：Diamond–Dybvig（1983，JPE）银行挤兑模型。参数为课堂重构，数值与仓库 <a href="https://github.com/snowjqm-sys/diamond-dybvig-bernanke">dd_model.py</a> 完全一致，不代表原文校准；存款保险情景假设全额即时兑付。配套页面：Bernanke（1983）信贷渠道互动模型。</div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const $ = id => document.getElementById(id);
+      const el = {
+        R:$("inR"), lam:$("inLam"), gamma:$("inGamma"), m:$("inM"), insured:$("inInsured"),
+        ROut:$("outR"), lamOut:$("outLam"), gammaOut:$("outGamma"), mOut:$("outM"),
+        vC1:$("vC1"), vC2:$("vC2"), vMstar:$("vMstar"), vMbar:$("vMbar"),
+        nodeMstar:$("nodeMstar"), nodeMbar:$("nodeMbar"),
+        statusBox:$("statusBox"), statusTitle:$("statusTitle"), statusSub:$("statusSub"),
+        chart:$("ddChart"), stackbar:$("stackbar"), barLegend:$("barLegend"), claimsLine:$("claimsLine")
+      };
+      const pct=(x,d=1)=>(x*100).toFixed(d)+"%";
+      const clamp=(x,lo,hi)=>Math.max(lo,Math.min(hi,x));
+
+      const state=()=>({R:+el.R.value, lam:+el.lam.value, gamma:+el.gamma.value, m:+el.m.value/100, insured:el.insured.checked});
+
+      function compute(p){
+        const c1=1/(p.lam+(1-p.lam)*Math.pow(p.R,1/p.gamma-1));
+        const c2=c1*Math.pow(p.R,1/p.gamma);
+        const claims=p.lam+p.m*(1-p.lam);
+        const mStar=(c2-c1)/(c1*(p.R-1));
+        const mBar=(1/c1-p.lam)/(1-p.lam);
+        return {c1,c2,claims,mStar,mBar};
+      }
+      const claimsAt=(p,m)=>p.lam+m*(1-p.lam);
+      const runAt=(p,r,m)=>p.insured? r.c1 : Math.min(r.c1, 1/claimsAt(p,m));
+      const waitAt=(p,r,m)=>p.insured? r.c2 : (claimsAt(p,m)*r.c1>=1 ? 0 : (1-claimsAt(p,m)*r.c1)*p.R/((1-m)*(1-p.lam)));
+
+      /* ---------- 图表 ---------- */
+      const VBW=900,VBH=430,PADL=54,PADR=24,PADT=30,PADB=48,PW=VBW-PADL-PADR,PH=VBH-PADB-PADT;
+      const X=m=>PADL+m*PW;
+      const niceStep=raw=>{const p=Math.pow(10,Math.floor(Math.log10(raw)));const n=raw/p;return (n<=1?1:n<=2?2:n<=5?5:10)*p;};
+
+      function draw(p,r){
+        const step=niceStep(Math.max(r.c2,1)*1.1/5);
+        const ymax=Math.ceil(Math.max(r.c2,1)*1.1/step)*step;
+        const Y=v=>PADT+PH-(v/ymax)*PH;
+        let g="";
+        if(!p.insured){
+          const xm=X(Math.min(r.mStar,1));
+          g+=`<rect x="${X(0)}" y="${PADT}" width="${xm-X(0)}" height="${PH}" fill="var(--green-soft)" opacity=".5"/>`;
+          g+=`<rect x="${xm}" y="${PADT}" width="${X(1)-xm}" height="${PH}" fill="var(--red-soft)" opacity=".45"/>`;
+        }
+        const nT=Math.round(ymax/step);
+        for(let i=0;i<=nT;i++){
+          const v=i*step, y=Y(v);
+          g+=`<line class="gridline" x1="${PADL}" y1="${y}" x2="${PADL+PW}" y2="${y}"/>`;
+          g+=`<text x="${PADL-8}" y="${y+4}" text-anchor="end">${step<1?v.toFixed(1):v}</text>`;
+        }
+        for(let i=0;i<=5;i++){
+          const x=X(i/5);
+          g+=`<line class="axis" x1="${x}" y1="${PADT+PH}" x2="${x}" y2="${PADT+PH+5}"/>`;
+          g+=`<text x="${x}" y="${PADT+PH+20}" text-anchor="middle">${i*20}%</text>`;
+        }
+        g+=`<line class="axis" x1="${PADL}" y1="${PADT}" x2="${PADL}" y2="${PADT+PH}"/>`;
+        g+=`<line class="axis" x1="${PADL}" y1="${PADT+PH}" x2="${PADL+PW}" y2="${PADT+PH}"/>`;
+        g+=`<text x="${PADL+PW-6}" y="${PADT+12}" text-anchor="end">人均消费 ↑</text>`;
+
+        const knots=[...new Set([0,1,r.mStar,r.mBar,...Array.from({length:41},(_,i)=>i/40)])].filter(v=>v>=0&&v<=1).sort((a,b)=>a-b);
+        const path=f=>knots.map((m,i)=>`${i?"L":"M"}${X(m).toFixed(1)},${Y(f(m)).toFixed(1)}`).join(" ");
+        if(!p.insured){
+          g+=`<path class="line-wait" d="${path(m=>waitAt(p,r,m))}"/>`;
+          g+=`<path class="line-run" d="${path(m=>runAt(p,r,m))}"/>`;
+          g+=`<line class="axis" x1="${X(r.mStar)}" y1="${PADT}" x2="${X(r.mStar)}" y2="${PADT+PH}" stroke-dasharray="5 4"/>`;
+          g+=`<text x="${X(r.mStar)}" y="${PADT+14}" text-anchor="middle" class="mark" style="fill:var(--ink)">m* = ${pct(r.mStar)}</text>`;
+          g+=`<line class="axis" x1="${X(r.mBar)}" y1="${PADT}" x2="${X(r.mBar)}" y2="${PADT+PH}" stroke-dasharray="3 4" style="stroke:var(--red)" opacity=".65"/>`;
+          g+=`<text x="${X(r.mBar)}" y="${PADT+32}" text-anchor="middle" class="mark" style="fill:var(--red)">m̄ = ${pct(r.mBar)}</text>`;
+          g+=`<text x="${X(0)+8}" y="${Y(r.c2)-8}" class="endl" style="fill:var(--green)">等 · v_wait</text>`;
+          g+=`<text x="${PADL+PW-6}" y="${Y(runAt(p,r,1))-8}" text-anchor="end" class="endl" style="fill:var(--red)">跑 · v_run</text>`;
+        }else{
+          g+=`<line class="line-wait" x1="${PADL}" y1="${Y(r.c2)}" x2="${PADL+PW}" y2="${Y(r.c2)}"/>`;
+          g+=`<text x="${PADL+PW-6}" y="${Y(r.c2)-8}" text-anchor="end" class="endl" style="fill:var(--green)">等 · v_wait = c₂</text>`;
+          g+=`<line class="line-run-ins" x1="${PADL}" y1="${Y(r.c1)}" x2="${PADL+PW}" y2="${Y(r.c1)}"/>`;
+          g+=`<text x="${PADL+PW-6}" y="${Y(r.c1)+18}" text-anchor="end" class="endl" style="fill:var(--blue)">跑 · v_run = c₁（保险兑付）</text>`;
+        }
+        if(!p.insured){
+          const zg=X(r.mStar)-X(0), zr=X(1)-X(r.mStar);
+          if(zg>110) g+=`<text x="${(X(0)+X(r.mStar))/2}" y="${PADT+PH-14}" text-anchor="middle" class="zone" style="fill:var(--green)">等待占优区</text>`;
+          if(zr>110) g+=`<text x="${(X(r.mStar)+X(1))/2}" y="${PADT+PH-14}" text-anchor="middle" class="zone" style="fill:var(--red)">挤兑区：跑占优</text>`;
+        }
+        const cx=X(p.m);
+        g+=`<line x1="${cx}" y1="${PADT}" x2="${cx}" y2="${PADT+PH}" stroke="var(--amber)" stroke-width="1.6"/>`;
+        g+=`<circle class="marker" cx="${cx}" cy="${Y(runAt(p,r,p.m))}" r="4.5" fill="var(--amber)"/>`;
+        g+=`<circle class="marker" cx="${cx}" cy="${Y(waitAt(p,r,p.m))}" r="4.5" fill="var(--amber)"/>`;
+        el.chart.innerHTML=g;
+      }
+
+      /* ---------- 堆叠条 ---------- */
+      function drawBar(p,r){
+        let segs=[];
+        const wWait=1-r.claims;
+        if(p.insured){
+          segs=[{cls:"seg-safe",w:r.claims,b:"提款者 · 保险足额兑付",s:`每人 c₁ = ${r.c1.toFixed(3)}`,i:pct(r.claims)},
+                {cls:"seg-wait",w:wWait,b:"等待者",s:`人均 c₂ = ${r.c2.toFixed(3)}`,i:pct(wWait)}];
+          el.claimsLine.textContent=`提款需求 ${pct(r.claims)} 的人口，全部由存款保险基金即时足额兑付；银行资产不动，等待者照常拿到 c₂。`;
+        }else{
+          const cap=1/r.c1, wPaid=Math.min(r.claims,cap), wZero=Math.max(0,r.claims-cap), need=r.claims*r.c1;
+          segs=[{cls:"seg-paid",w:wPaid,b:"提款者（足额）",s:`每人 c₁ = ${r.c1.toFixed(3)}`,i:pct(wPaid)}];
+          if(wZero>0.0005) segs.push({cls:"seg-zero",w:wZero,b:"提款落空",s:"银行资金已耗尽 · 得 0",i:pct(wZero)});
+          segs.push({cls:"seg-wait",w:wWait,b:"等待者",s:`人均 ${waitAt(p,r,p.m).toFixed(3)}`,i:pct(wWait)});
+          el.claimsLine.textContent=`提款需求 ${pct(r.claims)} 的人口 · 需要资产 ${pct(need)} —— `+(need<1
+            ?"低于 100%，银行无需全额清算，等待者分享剩余资产的收益。"
+            :"超过 100%，银行被迫全额清算：排在后面的人拿不到钱。");
+        }
+        el.stackbar.innerHTML=segs.map(sg=>`<div class="seg ${sg.cls}${sg.w<0.14?" thin":""}" style="width:${(sg.w*100).toFixed(2)}%"><b>${sg.b}</b><span>${sg.s}</span><i>${sg.i}</i></div>`).join("");
+        el.barLegend.textContent=segs.map(sg=>`${sg.b} ${sg.i}`).join(" · ");
+      }
+
+      /* ---------- 均衡判定 ---------- */
+      function updateStatus(p,r){
+        let cls,title,sub;
+        if(p.insured){
+          cls="blue";title="存款保险生效：等待严格占优";
+          sub=`v_wait = c₂ = ${r.c2.toFixed(3)} 恒大于 v_run = c₁ = ${r.c1.toFixed(3)}——无论多少人恐慌提款，跑都是亏的，挤兑均衡被直接排除。`;
+        }else if(Math.abs(p.m-r.mStar)<=0.015){
+          cls="amber";title="临界点：跑与等无差异";
+          sub=`m = ${pct(p.m,0)} 恰好在 m* = ${pct(r.mStar)} 附近：跑和不跑收益相同，信念轻轻一推，均衡就会翻面。`;
+        }else if(p.m>r.mStar){
+          cls="red";title="跑是最优反应：挤兑自我实现";
+          sub=`m = ${pct(p.m,0)} &gt; m* = ${pct(r.mStar)}：别人在跑，银行被迫提前清算，`+(p.m>=r.mBar
+            ?`资金已经耗尽（m ≥ m̄ = ${pct(r.mBar)}），等待者颗粒无收——越早跑越好。`
+            :"越晚走拿得越少——每个晚期储户都会选择跑。");
+        }else{
+          cls="green";title="等待是最优反应：正常均衡";
+          sub=`m = ${pct(p.m,0)} &lt; m* = ${pct(r.mStar)}：恐慌不足以撼动银行，留下来消费更高，没人有动机跑。`;
+        }
+        el.statusBox.className="callout "+cls;
+        el.statusTitle.textContent=title;
+        el.statusSub.innerHTML=sub;
+      }
+
+      /* ---------- 汇总更新 ---------- */
+      function update(){
+        const p=state(), r=compute(p);
+        el.ROut.textContent=(+el.R.value).toFixed(2);
+        el.lamOut.textContent=(+el.lam.value).toFixed(2);
+        el.gammaOut.textContent=(+el.gamma.value).toFixed(1);
+        el.mOut.textContent=el.m.value+"%";
+        el.vC1.textContent=r.c1.toFixed(3);
+        el.vC2.textContent=r.c2.toFixed(3);
+        el.vMstar.textContent=pct(r.mStar);
+        el.vMbar.textContent=pct(r.mBar);
+        el.nodeMstar.classList.toggle("dim",p.insured);
+        el.nodeMbar.classList.toggle("dim",p.insured);
+        updateStatus(p,r);
+        draw(p,r);
+        drawBar(p,r);
+      }
+
+      /* ---------- 事件 ---------- */
+      ["R","lam","gamma","m"].forEach(k=>el[k].addEventListener("input",update));
+      el.insured.addEventListener("change",update);
+
+      const PRESETS={normal:{m:0,insured:false},partial:{m:90,insured:false},panic:{m:100,insured:false},insured:{m:0,insured:true}};
+      document.querySelectorAll(".preset[data-preset]").forEach(b=>b.addEventListener("click",()=>{
+        const s=PRESETS[b.dataset.preset];
+        el.m.value=s.m; el.insured.checked=s.insured; update();
+      }));
+
+      const TABS=[["tab-equations","panel-equations"],["tab-paper","panel-paper"]];
+      TABS.forEach(([t])=>$(t).addEventListener("click",()=>{
+        TABS.forEach(([t2,p2])=>{$(t2).setAttribute("aria-selected",String(t2===t));$(p2).hidden=t2!==t;});
+      }));
+
+      let drag=false;
+      const toM=e=>{
+        const rc=el.chart.getBoundingClientRect();
+        return clamp(((e.clientX-rc.left)/rc.width*VBW-PADL)/PW,0,1);
+      };
+      const setM=v=>{el.m.value=Math.round(clamp(v,0,1)*100);update();};
+      el.chart.addEventListener("pointerdown",e=>{drag=true;try{el.chart.setPointerCapture(e.pointerId);}catch(_){}setM(toM(e));});
+      el.chart.addEventListener("pointermove",e=>{if(drag)setM(toM(e));});
+      el.chart.addEventListener("pointerup",()=>drag=false);
+      el.chart.addEventListener("pointercancel",()=>drag=false);
+
+      update();
+    })();
+  </script>
+</body>
+</html>
