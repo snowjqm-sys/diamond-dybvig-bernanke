@@ -30,6 +30,15 @@ graph LR
 
 DD 解释这条链的第一环（脆弱性从哪来），Bernanke 解释后面的传导（为什么放大成持续衰退）。
 
+## 互动网页（GitHub Pages · 点开即用）
+
+| 模型 | 在线入口 | 能玩什么 |
+|---|---|---|
+| Diamond–Dybvig 挤兑模型 | **[dd-interactive.html](https://snowjqm-sys.github.io/diamond-dybvig-bernanke/dd-interactive.html)** | 调 R / λ / γ / m，看跑/等收益曲线与 m\*、m̄ 临界点，先到先得的银行账本，一键打开存款保险 |
+| Bernanke 信贷渠道 | **[bernanke-interactive.html](https://snowjqm-sys.github.io/diamond-dybvig-bernanke/bernanke-interactive.html)** | 调银行受损 / 借款人困境 / 信息资本损失，看传导链、外部融资溢价与产出路径动画 |
+
+> 两页均为「课堂重构」：参数是教学设定，数值与仓库 `dd_model.py` / `bernanke_1983.py` 完全一致，不代表原文估计结果。
+
 ## 核心结果一览
 
 | | 结果 | 含义 |
