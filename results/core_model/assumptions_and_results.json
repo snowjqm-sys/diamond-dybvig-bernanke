@@ -1,0 +1,74 @@
+{
+  "evidence_type": "assumed teaching scenarios; not historical estimates",
+  "parameters": {
+    "c": 0.6,
+    "b": 20.0,
+    "k": 0.05,
+    "h": 10.0,
+    "theta": 0.05,
+    "eta": 1.0,
+    "chi": 1.0,
+    "baseline_output": 100.0
+  },
+  "dd_bridge": {
+    "m": 0.4,
+    "R": 2,
+    "lambda": 0.4,
+    "gamma": 2,
+    "initial_distress": 0.29116882454314214,
+    "assumption": "extra liquidation -> distress"
+  },
+  "money_path": "real_money_gap[t] = -0.1 * 0.5**t (assumed)",
+  "scenarios": {
+    "money_only": {
+      "rho": 0.85,
+      "output_gap_t0": -0.4,
+      "output_gap_last": -4.76837158203125e-08
+    },
+    "credit_fast": {
+      "rho": 0.35,
+      "output_gap_t0": -0.9823376490862843,
+      "output_gap_last": -4.770271522043283e-08
+    },
+    "credit_slow": {
+      "rho": 0.85,
+      "output_gap_t0": -0.9823376490862843,
+      "output_gap_last": -0.013861545481318153
+    },
+    "credit_only": {
+      "rho": 0.85,
+      "output_gap_t0": -0.5823376490862843,
+      "output_gap_last": -0.013861497797602334
+    }
+  },
+  "liquidity_examples": {
+    "no_support": {
+      "required_liquidation": 35.0,
+      "actual_liquidation": 35.0,
+      "payment_shortfall": 0.0,
+      "equity_before": 10,
+      "equity_after_loan_before_payout": 10
+    },
+    "support_20": {
+      "required_liquidation": 15.0,
+      "actual_liquidation": 15.0,
+      "payment_shortfall": 0.0,
+      "equity_before": 10,
+      "equity_after_loan_before_payout": 10
+    },
+    "insolvent_support_20": {
+      "required_liquidation": 21.42857142857143,
+      "actual_liquidation": 21.42857142857143,
+      "payment_shortfall": 0.0,
+      "equity_before": -10,
+      "equity_after_loan_before_payout": -10
+    }
+  },
+  "limitations": [
+    "No historical calibration or estimation",
+    "No default or fiscal equilibrium",
+    "DD-to-distress bridge and persistence are assumed",
+    "Linear short-run IS-LM; no interest-rate bound",
+    "Credit quantity constraints and borrower net worth are optional, not implemented"
+  ]
+}

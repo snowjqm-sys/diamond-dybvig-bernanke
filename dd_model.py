@@ -12,6 +12,8 @@ Diamond–Dybvig (1983) 银行挤兑模型 —— 课堂版 Python 实现
   3. 存款保险：可信担保如何排除挤兑均衡（同时提示道德风险，见 README）。
 
 所有参数均为课堂演示校准，不对应任何真实银行数据。
+本模型的银行对应存款中介／商业银行；央行是另加的政策主体。
+保险实现外生保证等待支付，没有政府预算；道德风险没有在本模型中内生求解。
 公式均为原论文思想的课堂重构，不是 Diamond–Dybvig (1983) 的逐字复刻。
 
 运行：python dd_model.py            # 输出数值结果并保存 figures/ 下的图
@@ -89,7 +91,7 @@ def optimal_contract(R=2.0, lam=0.4, gamma=2.0):
     max  lam*u(c1) + (1-lam)*u(c2)
     s.t. lam*c1 + (1-lam)*c2/R <= 1        （按 t=0 资源折算的支付承诺）
 
-    CRRA 下由 FOC u'(c1) = u'(c2)/R 得 c2 = c1 * R^(1/gamma)，
+    CRRA 下由 FOC u'(c1) = R*u'(c2) 得 c2 = c1 * R^(1/gamma)，
     代入约束得 c1 = 1 / (lam + (1-lam) * R^(1/gamma - 1))。
     """
     c1 = 1.0 / (lam + (1.0 - lam) * R ** (1.0 / gamma - 1.0))
@@ -142,7 +144,7 @@ def simulate_run(N=200_000, lam=0.4, R=2.0, gamma=2.0, m_panic=0.0, insured=Fals
     蒙特卡洛模拟一次挤兑事件（序贯服务 / 先到先得）。
 
     m_panic  : 晚期消费者中去挤兑的比例（恐慌信念的体现）
-    insured  : 政府全额担保存款（等待者稳拿 c2）
+    insured  : 外生承诺等待者稳拿 c2，不含财政预算或内生提款策略调整
 
     返回 (每位储户的实现消费, 统计字典)。
     """

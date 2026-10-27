@@ -34,6 +34,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from historical_data import describe_csv, validate_dates
 
 # ----------------------------------------------------------------------
 # 统一设计系统（与 dd_model.py 保持一致）
@@ -168,9 +169,27 @@ def simulate_data(seed=1983):
 def load_csv(path):
     """读取真实数据 CSV：需要列 date, dln_ip, money_growth, price_inflation, bank_distress, borrower_distress。"""
     with open(path, newline="", encoding="utf-8-sig") as f:
-        rows = list(csv.DictReader(f))
+        reader = csv.DictReader(f)
+        fields = set(reader.fieldnames or [])
+        required = {"date", "dln_ip", "money_growth", "price_inflation", "bank_distress", "borrower_distress"}
+        missing = sorted(required - fields)
+        if missing:
+            raise ValueError("完整回归缺少字段：" + ", ".join(missing) +
+                             "。只有 ip/cpi/baa 的附件请用 --describe-csv；不以模拟值补齐历史变量。")
+        rows = list(reader)
+    validate_dates(rows)
     need = ["dln_ip", "money_growth", "price_inflation", "bank_distress", "borrower_distress"]
+    if len(rows) < 8:
+        raise ValueError("完整回归至少需要 8 个连续月份；更长样本仍需检验统计适用性。")
+    for row in rows:
+        for name in need:
+            if not row[name].strip():
+                raise ValueError(f"{row['date']} 的 {name} 缺失；先对齐完整连续样本，不用零填补。")
     data = {c: np.array([float(r[c]) for r in rows]) for c in need}
+    if not all(np.isfinite(v).all() for v in data.values()):
+        raise ValueError("回归数据必须为有限数值。")
+    if any(np.std(data[c][1:]) == 0 for c in need[1:]):
+        raise ValueError("回归解释变量不能为常数。")
     data["date"] = [r.get("date", "") for r in rows]
     return data
 
@@ -179,11 +198,7 @@ def load_csv(path):
 # 3. 回归与图
 # ----------------------------------------------------------------------
 def run_regressions(data):
-    y = data["dln_ip"]
-    bank_lag = np.r_[0.0, data["bank_distress"][:-1]]
-
-    XA = np.column_stack([np.ones(len(y)), zscore(data["money_growth"]), zscore(data["price_inflation"])])
-    XB = np.column_stack([XA, data["bank_distress"], bank_lag, data["borrower_distress"]])
+    y, XA, XB = regression_design(data)
 
     resA = ols(y, XA, ["常数项", "货币增长(标准化)", "价格通胀(标准化)"])
     resB = ols(y, XB, ["常数项", "货币增长(标准化)", "价格通胀(标准化)",
@@ -191,7 +206,19 @@ def run_regressions(data):
     return resA, resB
 
 
-def fig_timeseries(data, path):
+def regression_design(data):
+    """Drop the unavailable initial lag; both specifications use the same months."""
+    y = data["dln_ip"][1:]
+    XA = np.column_stack([np.ones(len(y)), zscore(data["money_growth"][1:]),
+                          zscore(data["price_inflation"][1:])])
+    XB = np.column_stack([XA, data["bank_distress"][1:], data["bank_distress"][:-1],
+                          data["borrower_distress"][1:]])
+    if np.linalg.matrix_rank(XB) < XB.shape[1]:
+        raise ValueError("完整回归设计矩阵不满秩，无法解释单个系数。")
+    return y, XA, XB
+
+
+def fig_timeseries(data, path, simulated=True):
     """机制图风格：工业产出变化 vs 金融困境指数（双轴，标准化），标注三次银行恐慌。"""
     x = np.arange(len(data["dln_ip"]))
     distress = zscore(data["bank_distress"]) + 0.6 * zscore(data["borrower_distress"])
@@ -202,8 +229,7 @@ def fig_timeseries(data, path):
             label="Δln(工业生产)（左轴）")
     ax1.axhline(0, color=GRAY, lw=0.8)
     ax1.set_ylabel("Δln(IP)")
-    ax1.set_xlabel("月份（1929-01 → 1933-12）")
-    ax1.set_ylim(-0.06, 0.05)
+    ax1.set_xlabel(f"月份（{data['date'][0]} → {data['date'][-1]}）")
     style_ax(ax1)
 
     ax2 = ax1.twinx()
@@ -214,9 +240,9 @@ def fig_timeseries(data, path):
     ymax = float(distress.max())
     ax2.set_ylim(-1.6, ymax * 1.32)
 
-    for idx, txt, dx in [(22, "1930-11 银行停业潮", -8),
+    for idx, txt, dx in ([(22, "1930-11 教学冲击", -8),
                          (32, "1931-09 恐慌扩散", -8),
-                         (50, "1933-03 最终挤兑", -13)]:
+                         (50, "1933-03 教学冲击", -13)] if simulated else []):
         ax2.annotate(txt, xy=(idx, distress[idx]),
                      xytext=(idx + dx, min(distress[idx] + ymax * 0.14, ymax * 1.12)),
                      fontsize=8.5, color=BLUE, ha="center",
@@ -227,30 +253,27 @@ def fig_timeseries(data, path):
     handles = [Patch(facecolor="#9CBF9C", label="Δln(工业生产)（左轴）"),
                Line2D([0], [0], color=BLUE, lw=2.2, label="金融困境指数（右轴，标准化）")]
     ax1.legend(handles=handles, fontsize=9, loc="lower left")
-    ax1.set_title("金融困境与工业生产共同恶化 —— 描述性证据，不等于因果识别")
+    ax1.set_title("课堂模拟数据：预设金融冲击与产出变化" if simulated else
+                  "用户 CSV：金融代理与工业生产变化（来源未自动核验）")
     fig.savefig(path, dpi=160)
     plt.close(fig)
 
 
-def fig_fit(data, resA, resB, path):
-    x = np.arange(len(data["dln_ip"]))
-    bank_lag = np.r_[0.0, data["bank_distress"][:-1]]
-    XA = np.column_stack([np.ones(len(x)), zscore(data["money_growth"]),
-                          zscore(data["price_inflation"])])
-    XB = np.column_stack([XA, data["bank_distress"], bank_lag, data["borrower_distress"]])
+def fig_fit(data, resA, resB, path, simulated=True):
+    y, XA, XB = regression_design(data)
+    x = np.arange(len(y))
 
     fig, ax = plt.subplots(figsize=(11.5, 4.8), constrained_layout=True)
-    ax.plot(x, data["dln_ip"], color=INK, lw=1.8, label="实际（模拟）Δln(IP)")
+    ax.plot(x, y, color=INK, lw=1.8, label="输入序列 Δln(IP)")
     ax.plot(x, resA["beta"] @ XA.T, lw=1.6, ls=(0, (4, 3)), color=ORANGE,
             label=f"模型 A（仅货币/价格）  R²={resA['r2']:.2f}")
     ax.plot(x, resB["beta"] @ XB.T, lw=2.0, color=BLUE,
             label=f"模型 B（+ 金融变量）      R²={resB['r2']:.2f}")
     ax.axhline(0, color=GRAY, lw=0.7)
-    ax.set_xlabel("月份（1929-01 → 1933-12）")
+    ax.set_xlabel(f"共同估计样本（{data['date'][1]} → {data['date'][-1]}）")
     ax.set_ylabel("Δln(IP)")
-    ax.set_title("加入金融变量后，产出收缩的大部分被解释了（模拟数据，仅演示框架）")
+    ax.set_title("课堂模拟：比较拟合，不构成历史验证" if simulated else "用户 CSV：模型拟合比较，不构成因果识别")
     ax.legend(fontsize=9.5, loc="lower left")
-    ax.set_ylim(-0.055, 0.045)
     style_ax(ax)
     fig.savefig(path, dpi=160)
     plt.close(fig)
@@ -261,19 +284,37 @@ def fig_fit(data, resA, resB, path):
 # ----------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser(description="Bernanke (1983) 课堂重构回归（默认模拟数据）")
-    ap.add_argument("--csv", help="真实数据 CSV 路径（列：date, dln_ip, money_growth, "
+    modes = ap.add_mutually_exclusive_group()
+    modes.add_argument("--csv", help="完整回归 CSV 路径（列：date, dln_ip, money_growth, "
                                   "price_inflation, bank_distress, borrower_distress）")
+    modes.add_argument("--describe-csv", help="只描述附件 CSV（date, ip, cpi, baa），不运行完整回归")
+    ap.add_argument("--output-dir", default=FIG_DIR, help="图表与描述统计保存目录")
     ap.add_argument("--seed", type=int, default=1983, help="模拟数据随机种子")
     args = ap.parse_args()
 
+    os.makedirs(args.output_dir, exist_ok=True)
+    if args.describe_csv:
+        try:
+            report = describe_csv(args.describe_csv, args.output_dir)
+        except (ValueError, OSError) as exc:
+            ap.error(str(exc))
+        import json
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return
     if args.csv:
-        data = load_csv(args.csv)
-        src = f"真实数据（用户提供）：{args.csv}"
+        try:
+            data = load_csv(args.csv)
+        except (ValueError, OSError) as exc:
+            ap.error(str(exc))
+        src = f"用户 CSV（本脚本未核验其历史来源）：{args.csv}"
     else:
         data = simulate_data(args.seed)
         src = "课堂演示用模拟数据（非历史数据，仅展示回归框架）"
 
-    resA, resB = run_regressions(data)
+    try:
+        resA, resB = run_regressions(data)
+    except ValueError as exc:
+        ap.error(str(exc))
 
     print("=" * 78)
     print("Bernanke (1983) 非货币信用渠道 —— 课堂重构版回归")
@@ -289,19 +330,20 @@ def main():
     sig = sum(1 for i in idx if resB["p"][i] < 0.05)
     neg = sum(1 for i in idx if resB["beta"][i] < 0)
     print(f"  1. 模型 B 中 {sig}/3 个金融变量在 5% 水平显著，且 {neg}/3 符号为负")
-    print("     → '金融困境越严重、产出越低'，金融变量有货币/价格之外的额外解释力。")
-    print(f"  2. 滞后项显著为负 → 信用网络重建需要时间，冲击具有持续性。")
-    print(f"  3. R² 从 {resA['r2']:.3f} 升到 {resB['r2']:.3f} → 金融渠道改善了对产出收缩的解释。")
-    print("  4. 表述边界：只能说'支持非货币信用渠道'，不能说'证明了银行危机导致大萧条'")
-    print("     （时间序列内生性，反向因果未被排除）。")
+    print("     → 这里只报告输入样本的统计关系，不能单凭显著性识别信用渠道。")
+    print("  2. 滞后系数不能单独识别信息网络恢复速度；还可能反映其他持续因素。")
+    print(f"  3. R²：{resA['r2']:.3f} → {resB['r2']:.3f}；调整R²：{resA['adj_r2']:.3f} → {resB['adj_r2']:.3f}。")
+    print("  4. 默认数据的生成过程预设金融变量影响产出；结果不是历史证据。")
+    print("     用户 CSV 也需检查内生性、样本选择、代理测量和结构变化。")
+    print("     当前为普通 OLS 标准误与正态近似 p 值，未进行时序稳健推断。")
 
-    p1 = os.path.join(FIG_DIR, "fig4_bernanke_timeseries.png")
-    p2 = os.path.join(FIG_DIR, "fig5_bernanke_fit.png")
-    fig_timeseries(data, p1)
-    fig_fit(data, resA, resB, p2)
+    p1 = os.path.join(args.output_dir, "fig4_bernanke_timeseries.png")
+    p2 = os.path.join(args.output_dir, "fig5_bernanke_fit.png")
+    fig_timeseries(data, p1, simulated=not bool(args.csv))
+    fig_fit(data, resA, resB, p2, simulated=not bool(args.csv))
     print("\n图表已保存：")
-    print("  - figures/fig4_bernanke_timeseries.png")
-    print("  - figures/fig5_bernanke_fit.png")
+    print("  - " + p1)
+    print("  - " + p2)
 
 
 if __name__ == "__main__":
