@@ -1,0 +1,30 @@
+{
+  "evidence_type": "descriptive only; no regression or causal identification",
+  "source_file": "data_1929_1933_real.csv",
+  "sha256": "8f4acec165b97ab70c4d513277d71ee888e8a18d4e591e0629844212e3c6886d",
+  "source_status": "user-supplied attachment, labeled FRED by source document; not point-by-point reverified online",
+  "rows": 60,
+  "first_date": "1929-01",
+  "last_date": "1933-12",
+  "difference_rows": 59,
+  "ip_start_to_min_pct": -50.89580449366415,
+  "ip_peak_to_trough_pct": -53.558839820736196,
+  "ip_peak_date": "1929-07",
+  "ip_trough_date": "1932-07",
+  "cpi_start_to_end_pct": -22.807017543859665,
+  "correlation_ip_growth_baa_change": -0.49039715813826773,
+  "correlation_ip_growth_inflation": 0.3515963772353407,
+  "missing_full_regression_columns": [
+    "bank_distress",
+    "borrower_distress",
+    "money_growth",
+    "price_inflation"
+  ],
+  "limitations": [
+    "BAA is a yield level, not a credit spread or bank failure measure",
+    "INDPRO is industrial output, not GDP",
+    "CPI is not money supply",
+    "Observed inflation is not expected inflation",
+    "No historical model estimated"
+  ]
+}
